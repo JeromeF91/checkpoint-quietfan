@@ -1,0 +1,15 @@
+[Unit]
+Description=NCT7904 quiet fan daemon
+After=systemd-modules-load.service sys-class-hwmon.mount
+Wants=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/quietfan
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
