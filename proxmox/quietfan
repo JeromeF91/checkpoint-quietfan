@@ -98,7 +98,22 @@ def set_pwm(nct, p):
         path = os.path.join(nct, "pwm%d" % i)
         write_int(path, p)
         write_int(path, p)
+    # pwm1 is the channel that actually drives this chassis; it often
+    # ignores the first write after SmartFan / module bind.
+    p1 = os.path.join(nct, "pwm1")
+    for _ in range(3):
+        if read_int(p1) == p:
+            break
+        write_int(os.path.join(nct, "pwm1_enable"), MANUAL_ENABLE)
+        write_int(p1, p)
+        time.sleep(0.2)
+        write_int(p1, p)
     return p
+
+
+def pwm_applied(nct, p):
+    v = read_int(os.path.join(nct, "pwm1"))
+    return v == p
 
 
 def wait_hw():
@@ -123,7 +138,7 @@ def main():
         tgt = pwm_for(t)
         if cur is not None and tgt < cur and last_t is not None and t > last_t - HYST:
             tgt = cur
-        if cur != tgt:
+        if cur != tgt or not pwm_applied(nct, tgt):
             cur = set_pwm(nct, tgt)
             last_t = t
             print("quietfan: temp=%.1fC pwm=%d" % (t, cur), flush=True)

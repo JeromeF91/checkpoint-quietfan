@@ -32,6 +32,14 @@ Points in between are linearly interpolated. On the way down, PWM does not drop 
 
 ## Safety (both)
 
-- Control fans only through NCT7904 sysfs PWM. Never `echo nct7904 > unbind`, and do not talk raw I2C to `0x2e` while the driver is bound.
+- Control fans only through NCT7904 sysfs PWM. Never `echo nct7904 > unbind`, and do not talk raw I2C to `0x2e` while the driver is bound (kernel oops, `/dev/ipmi0` gone until reboot).
 - After install, confirm CPU temps under load, not only at idle.
 - If the box hits a critical temperature, firmware/SmartFan can still pin the fans.
+
+## BMC / IPMI (this chassis)
+
+`ipmitool` **cannot set** chassis PWM. OEM/PICMG/SuperMicro/AMI/Dell raw fan-set commands all return `0xc1`. The BMC is a tachometer and PSU sensor, not a fan controller.
+
+Linux `nct7904` on SMBus `0x2e` and the BMC share that bus. While the host talks to the chip (kernel driver **or** userspace SMBus), IPMI `SYS_FAN*` and PSU watts/current/fans freeze on a plausible snapshot. They become live again only after a **reboot with `nct7904` blacklisted**. A live `rmmod` is not enough.
+
+There is no second Linux driver that shares the bus. Programming the NCT7904 SmartFan table in RAM can drop PWM1, but it does not survive reboot and still blinds the BMC. Quietfan remains the way to keep the chassis quiet. Details and numbers: [docs/proxmox.md](docs/proxmox.md).
