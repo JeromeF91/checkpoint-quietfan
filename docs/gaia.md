@@ -1,8 +1,10 @@
 # quietfan on Gaia R81
 
-For a Check Point 16200 still running **Gaia R81** (Python 2.7, SysV `chkconfig`, no systemd).
+For a Check Point **16200** still running **Gaia R81** (Python 2.7, SysV `chkconfig`, no systemd).
 
-Proxmox install is in [proxmox.md](proxmox.md). Shared curve and safety notes are in the [root README](../README.md).
+A **6900** (QM-20-00, NCT6779, Gaia R80.40) is a different chip and curve: [gaia-6900.md](gaia-6900.md).
+
+Proxmox install (16200) is in [proxmox.md](proxmox.md). Shared curve and safety notes are in the [root README](../README.md).
 
 ## What it does
 

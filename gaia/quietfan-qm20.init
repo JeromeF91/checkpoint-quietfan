@@ -1,0 +1,22 @@
+#!/bin/sh
+# chkconfig: 2345 99 10
+# description: NCT6779 quiet fan daemon (Check Point 6900)
+PROG=/usr/bin/python
+DAEMON=/usr/local/sbin/quietfan
+PID=/var/run/quietfan.pid
+LOG=/var/log/quietfan.log
+start() {
+  nohup $PROG -u $DAEMON >>$LOG 2>&1 &
+  echo $! > $PID
+  echo started
+}
+stop() {
+  if [ -f $PID ]; then kill `cat $PID` 2>/dev/null; rm -f $PID; fi
+  echo stopped
+}
+case "$1" in
+start) start ;;
+stop) stop ;;
+restart) stop; sleep 1; start ;;
+*) echo "Usage: $0 {start|stop|restart}"; exit 1 ;;
+esac
