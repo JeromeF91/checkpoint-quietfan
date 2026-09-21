@@ -1,3 +1,14 @@
 *.pyc
 *.pyo
 __pycache__/
+proxmox/_deploy.py
+proxmox/_payload.json
+proxmox/_hostpaste.sh
+proxmox/_b64_*.txt
+proxmox/_clearpaste.sh
+proxmox/_clearpaste.json
+proxmox/_shortpaste.sh
+proxmox/_qm20.b64
+proxmox/_qm20.p0
+proxmox/_qm20.p1
+

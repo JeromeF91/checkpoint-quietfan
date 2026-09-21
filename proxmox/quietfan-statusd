@@ -1,0 +1,151 @@
+#!/usr/bin/python3
+import glob, json, os, time
+
+P = "/run/quietfan-status.json"
+
+
+def ri(path):
+    try:
+        return int(open(path).read())
+    except Exception:
+        return None
+
+
+def hwmons(name):
+    out = []
+    for b in glob.glob("/sys/class/hwmon/hwmon*"):
+        try:
+            n = open(b + "/name").read().strip()
+        except Exception:
+            continue
+        if n == name:
+            out.append(b)
+    return out
+
+
+def cpu_mhz():
+    vals = []
+    g = "/sys/devices/system/cpu/cpu[0-9]*"
+    g += "/cpufreq/scaling_cur_freq"
+    for p in glob.glob(g):
+        v = ri(p)
+        if v:
+            vals.append(v / 1000.0)
+    if not vals:
+        return None
+    return {
+        "avg": int(round(sum(vals) / len(vals))),
+        "min": int(round(min(vals))),
+        "max": int(round(max(vals))),
+    }
+
+
+def cpu_temp():
+    pkgs = []
+    for b in hwmons("coretemp"):
+        for lab in glob.glob(b + "/temp*_label"):
+            try:
+                s = open(lab).read().strip()
+            except Exception:
+                continue
+            if not s.startswith("Package id"):
+                continue
+            pid = int(s.split()[-1])
+            v = ri(lab.replace("_label", "_input"))
+            if v and v > 0:
+                pkgs.append({
+                    "id": pid,
+                    "c": round(v / 1000.0, 1),
+                })
+    pkgs.sort(key=lambda x: x["id"])
+    hot = max((p["c"] for p in pkgs), default=None)
+    return {"hot": hot, "packages": pkgs}
+
+
+def disks():
+    out = []
+    for b in hwmons("drivetemp"):
+        names = []
+        d = b + "/device/block"
+        try:
+            names = sorted(os.listdir(d))
+        except Exception:
+            pass
+        name = names[0] if names else b
+        t = ri(b + "/temp1_input")
+        model = None
+        try:
+            model = open(
+                "/sys/block/%s/device/model" % name
+            ).read().strip()
+        except Exception:
+            pass
+        out.append({
+            "name": name,
+            "model": model,
+            "temp_c": round(t / 1000.0, 1) if t else None,
+        })
+    out.sort(key=lambda x: x["name"])
+    return out
+
+
+def chassis():
+    nct = (hwmons("nct7904") or [None])[0]
+    if not nct:
+        return None
+    temps = []
+    for i in (1, 2):
+        v = ri("%s/temp%d_input" % (nct, i))
+        if not v or v <= 0:
+            continue
+        c = round(v / 1000.0, 1)
+        if 0 < c < 120:
+            temps.append({"id": i, "c": c})
+    if not temps:
+        return None
+    return {
+        "hot": max(t["c"] for t in temps),
+        "temps": temps,
+    }
+
+
+def fans():
+    nct = (hwmons("nct7904") or [None])[0]
+    if not nct:
+        return [], None
+    items = []
+    for i in range(1, 9):
+        rpm = ri("%s/fan%d_input" % (nct, i))
+        if rpm and rpm > 0:
+            items.append({"id": i, "rpm": rpm})
+    return items, ri(nct + "/pwm1")
+
+
+def write(obj):
+    tmp = P + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(obj, f, separators=(",", ":"))
+            f.write("\n")
+        os.chmod(tmp, 0o644)
+        os.rename(tmp, P)
+    except Exception:
+        pass
+
+
+def main():
+    while True:
+        fans_l, pwm = fans()
+        write({
+            "cpu_mhz": cpu_mhz(),
+            "cpu_temp_c": cpu_temp(),
+            "chassis_temp_c": chassis(),
+            "disks": disks(),
+            "fans": fans_l,
+            "pwm": pwm,
+        })
+        time.sleep(4)
+
+
+if __name__ == "__main__":
+    main()

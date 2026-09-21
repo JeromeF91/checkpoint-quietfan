@@ -22,10 +22,23 @@ On this chassis **PWM1 is what actually sets fan RPM**. PWM2–4 can sit at 25 w
 | `proxmox/quietfan` | `/usr/local/sbin/quietfan` |
 | `proxmox/quietfan.service` | `/etc/systemd/system/quietfan.service` |
 | `proxmox/nct7904.conf` | `/etc/modules-load.d/nct7904.conf` |
+| `proxmox/drivetemp.conf` | `/etc/modules-load.d/drivetemp.conf` |
+| `proxmox/quietfan-status.js` | `/usr/share/pve-manager/js/quietfan-status.js` |
+| `proxmox/QuietfanStatus.pm` | `/usr/share/perl5/PVE/API2/QuietfanStatus.pm` |
+| `proxmox/quietfan-ui-apply` | `/usr/local/sbin/quietfan-ui-apply` |
+| `proxmox/99quietfan-ui` | `/etc/apt/apt.conf.d/99quietfan-ui` |
 
 The daemon waits up to 90s for `nct7904` `pwm1` so it can start before the module finishes probing.
 
 ## Install
+
+```bash
+bash proxmox/install-ui.sh
+```
+
+That also patches the node Summary page so CPU speed, CPU/disk temperatures, and chassis fan RPM show up under the stock widgets. `pve-manager` upgrades restore `Nodes.pm` and `index.html.tpl`; `/etc/apt/apt.conf.d/99quietfan-ui` re-applies those two edits automatically.
+
+Manual daemon-only install (no UI):
 
 ```bash
 modprobe nct7904
@@ -53,7 +66,7 @@ Log lines look like:
 quietfan: temp=42.0C pwm=25
 ```
 
-It only prints when PWM **changes**.
+It only prints when PWM **changes**. Live readings for the UI are in `/run/quietfan-status.json`. After a UI install, hard-refresh the browser (Ctrl+F5) and open the node **Summary**.
 
 ## Day-to-day
 
@@ -90,14 +103,29 @@ Raise PWM values if the box runs hot under VM load. Do not go below 20 on this c
 4. Apply 2°C down-hysteresis.
 5. Set `pwm1`–`pwm4` enable to `1` and write the duty twice (this chip sometimes ignores the first write).
 
+## Proxmox UI overlay
+
+The daemon writes `/run/quietfan-status.json` every 4s (world-readable). A 3-line patch to `/usr/share/perl5/PVE/API2/Nodes.pm` attaches that JSON to the node status API. `quietfan-status.js` is loaded after `pvemanagerlib.js` and adds CPU speed, CPU/chassis/disk temperatures, and fan RPM to the node Summary panel.
+
+CPU temperatures are coretemp packages, shown as CPU0 / CPU1. Chassis temperature is NCT7904 `temp1` / `temp2` (board diodes). Disk temperatures come from the `drivetemp` kernel module (SATA Intel SSDs on this box), not from `smartctl`. Chassis RPM is NCT7904 sysfs, not IPMI `SYS_FAN*`.
+
+Re-apply after a `pve-manager` upgrade:
+
+```bash
+/usr/local/sbin/quietfan-ui-apply
+```
+
+Then hard-refresh the browser.
+
 ## Hardware notes
 
 On Proxmox 9 / kernel `7.0.14-17-pve`, `modprobe nct7904` auto-binds SMBus I801 address `0x2e`. Other I2C devices on that bus (SPD EEPROMs, dummy, NIC) are unrelated.
 
 | hwmon name | Use |
 |------------|-----|
-| `nct7904` | Chassis PWM 1–4 and fan tachs |
+| `nct7904` | Chassis PWM 1–4, fan tachs, board temps |
 | `coretemp` | CPU package temperatures |
+| `drivetemp` | SATA SSD temperatures (`sda` / `sdb`) |
 | `i350bb` | Intel I350 NIC — **not** used for the curve |
 
 Do **not** unbind `nct7904` or poke raw I2C at `0x2e` while the driver is bound. That oopsed this platform’s kernel on Gaia and is not safer here.

@@ -1,0 +1,12 @@
+[Unit]
+Description=quietfan hardware status for Proxmox UI
+After=quietfan.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/quietfan-statusd
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

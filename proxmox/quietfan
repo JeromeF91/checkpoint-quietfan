@@ -2,8 +2,10 @@
 """Quiet chassis fans on Check Point 16200 hardware running Proxmox/Debian.
 
 Loads NCT7904 PWM in manual mode and follows CPU package temperature.
+Also writes /run/quietfan-status.json for the Proxmox node Summary overlay.
 """
 import glob
+import json
 import os
 import sys
 import time
@@ -22,6 +24,7 @@ MINPWM = 20
 INTERVAL = 4
 HYST = 2.0
 MANUAL_ENABLE = 1  # pwmN_enable: 1=manual, 2=SmartFan
+STATUS_PATH = "/run/quietfan-status.json"
 
 
 def read_int(path):
@@ -50,25 +53,40 @@ def hwmon_by_name(name):
     return None
 
 
-def cpu_temp():
-    vals = []
+def hwmon_all_named(name):
+    found = []
     for base in glob.glob("/sys/class/hwmon/hwmon*"):
         try:
-            if open(os.path.join(base, "name")).read().strip() != "coretemp":
-                continue
+            if open(os.path.join(base, "name")).read().strip() == name:
+                found.append(base)
         except Exception:
-            continue
+            pass
+    return found
+
+
+def cpu_packages():
+    pkgs = []
+    for base in hwmon_all_named("coretemp"):
         for lab in glob.glob(os.path.join(base, "temp*_label")):
             try:
-                if not open(lab).read().strip().startswith("Package id"):
+                label = open(lab).read().strip()
+                if not label.startswith("Package id"):
                     continue
+                pid = int(label.split()[-1])
                 v = read_int(lab.replace("_label", "_input"))
                 if v and v > 0:
-                    vals.append(v / 1000.0)
+                    pkgs.append({"id": pid, "c": round(v / 1000.0, 1)})
             except Exception:
                 pass
-    if vals:
-        return max(vals)
+    pkgs.sort(key=lambda p: p["id"])
+    return pkgs
+
+
+def cpu_temp():
+    pkgs = cpu_packages()
+    if pkgs:
+        return max(p["c"] for p in pkgs)
+    vals = []
     nct = hwmon_by_name("nct7904")
     if nct:
         for n in ("temp6_input", "temp7_input"):
@@ -76,6 +94,88 @@ def cpu_temp():
             if v and v > 0:
                 vals.append(v / 1000.0)
     return max(vals) if vals else None
+
+
+def cpu_mhz():
+    vals = []
+    for path in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq"):
+        v = read_int(path)
+        if v:
+            vals.append(v / 1000.0)
+    if not vals:
+        return None
+    return {
+        "avg": int(round(sum(vals) / len(vals))),
+        "min": int(round(min(vals))),
+        "max": int(round(max(vals))),
+    }
+
+
+def disk_temps():
+    disks = []
+    for base in hwmon_all_named("drivetemp"):
+        names = []
+        bdir = os.path.join(base, "device", "block")
+        try:
+            names = sorted(os.listdir(bdir))
+        except Exception:
+            pass
+        name = names[0] if names else os.path.basename(base)
+        t = read_int(os.path.join(base, "temp1_input"))
+        model = None
+        try:
+            model = open("/sys/block/%s/device/model" % name).read().strip()
+        except Exception:
+            pass
+        disks.append({
+            "name": name,
+            "model": model,
+            "temp_c": round(t / 1000.0, 1) if t else None,
+        })
+    disks.sort(key=lambda d: d["name"])
+    return disks
+
+
+def chassis_temps(nct):
+    temps = []
+    for i in (1, 2):
+        v = read_int(os.path.join(nct, "temp%d_input" % i))
+        if not v or v <= 0:
+            continue
+        c = round(v / 1000.0, 1)
+        if 0 < c < 120:
+            temps.append({"id": i, "c": c})
+    if not temps:
+        return None
+    return {
+        "hot": max(t["c"] for t in temps),
+        "temps": temps,
+    }
+
+
+def fan_status(nct):
+    fans = []
+    for i in range(1, 9):
+        rpm = read_int(os.path.join(nct, "fan%d_input" % i))
+        if rpm and rpm > 0:
+            fans.append({"id": i, "rpm": rpm})
+    pwm = read_int(os.path.join(nct, "pwm1"))
+    return fans, pwm
+
+
+def write_status(obj):
+    tmp = STATUS_PATH + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(obj, f, separators=(",", ":"))
+            f.write("\n")
+        os.chmod(tmp, 0o644)
+        os.rename(tmp, STATUS_PATH)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
 
 
 def pwm_for(t):
@@ -126,6 +226,24 @@ def wait_hw():
     sys.exit(1)
 
 
+def publish(nct, temp, pwm):
+    pkgs = cpu_packages()
+    fans, live_pwm = fan_status(nct)
+    if pwm is None:
+        pwm = live_pwm
+    write_status({
+        "cpu_mhz": cpu_mhz(),
+        "cpu_temp_c": {
+            "hot": temp,
+            "packages": pkgs,
+        },
+        "chassis_temp_c": chassis_temps(nct),
+        "disks": disk_temps(),
+        "fans": fans,
+        "pwm": pwm,
+    })
+
+
 def main():
     nct = wait_hw()
     cur = None
@@ -142,6 +260,7 @@ def main():
             cur = set_pwm(nct, tgt)
             last_t = t
             print("quietfan: temp=%.1fC pwm=%d" % (t, cur), flush=True)
+        publish(nct, t, cur)
         time.sleep(INTERVAL)
 
 

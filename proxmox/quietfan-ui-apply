@@ -1,0 +1,130 @@
+#!/usr/bin/python3
+"""Re-apply quietfan Proxmox Summary overlay."""
+import os
+import shutil
+import subprocess
+import sys
+
+SHARE = "/usr/local/share/quietfan"
+JS_SRC = SHARE + "/quietfan-status.js"
+PM_SRC = SHARE + "/QuietfanStatus.pm"
+JS_DST = "/usr/share/pve-manager/js/quietfan-status.js"
+PM_DST = "/usr/share/perl5/PVE/API2/QuietfanStatus.pm"
+NODES = "/usr/share/perl5/PVE/API2/Nodes.pm"
+INDEX = "/usr/share/pve-manager/index.html.tpl"
+
+ASSIGN = (
+    '        $res->{pveversion} = '
+    'PVE::pvecfg::package()'
+    ' . "/" . PVE::pvecfg::version_text();'
+)
+NL = chr(10)
+ASSIGN_NEW = ASSIGN + (
+    NL + "        eval { require "
+    "PVE::API2::QuietfanStatus; "
+    "$res->{quietfan} = "
+    "PVE::API2::QuietfanStatus::get_status(); };"
+)
+SCHEMA = (
+    "            pveversion => {" + NL
+    + "                type => 'string'," + NL
+    + "                description => "
+    + '"The PVE version string.",' + NL
+    + "            },"
+)
+SCHEMA_NEW = SCHEMA + (
+    NL + "            quietfan => {" + NL
+    + "                type => 'string'," + NL
+    + "                optional => 1," + NL
+    + "                description => "
+    + '"quietfan hardware status JSON",' + NL
+    + "            },"
+)
+SCRIPT = (
+    '    <script type="text/javascript" '
+    'src="/pve2/js/pvemanagerlib.js'
+    '?ver=[% version %]"></script>'
+)
+SCRIPT_NEW = SCRIPT + (
+    NL + '    <script type="text/javascript" '
+    'src="/pve2/js/quietfan-status.js'
+    '?ver=[% version %]-qf7"></script>'
+)
+
+
+def install_copies():
+    changed = False
+    pairs = ((JS_SRC, JS_DST), (PM_SRC, PM_DST))
+    for src, dst in pairs:
+        if not os.path.isfile(src):
+            raise SystemExit("missing " + src)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        same = (
+            os.path.isfile(dst)
+            and open(src, "rb").read()
+            == open(dst, "rb").read()
+        )
+        if not same:
+            shutil.copy2(src, dst)
+            os.chmod(dst, 0o644)
+            changed = True
+            print("installed " + dst)
+    return changed
+
+
+def patch_file(path, needle, insert, already):
+    text = open(path, encoding="utf-8").read()
+    if already in text:
+        return False
+    if needle not in text:
+        raise SystemExit("pattern missing in " + path)
+    open(path, "w", encoding="utf-8").write(
+        text.replace(needle, insert, 1)
+    )
+    print("patched " + path)
+    return True
+
+
+def main():
+    changed = install_copies()
+    changed = (
+        patch_file(
+            NODES, ASSIGN, ASSIGN_NEW,
+            "PVE::API2::QuietfanStatus",
+        )
+        or changed
+    )
+    changed = (
+        patch_file(
+            NODES, SCHEMA, SCHEMA_NEW,
+            "quietfan =>",
+        )
+        or changed
+    )
+    changed = (
+        patch_file(
+            INDEX, SCRIPT, SCRIPT_NEW,
+            "quietfan-status.js",
+        )
+        or changed
+    )
+    idx = open(INDEX, encoding="utf-8").read()
+    for old in (
+        "-qf1", "-qf2", "-qf3", "-qf4", "-qf5", "-qf6"
+    ):
+        if old in idx:
+            idx = idx.replace(old, "-qf7", 1)
+            open(INDEX, "w", encoding="utf-8").write(idx)
+            print("bumped overlay js version")
+            changed = True
+            break
+    if changed:
+        subprocess.check_call(
+            ["systemctl", "restart", "pveproxy"]
+        )
+        print("restarted pveproxy")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

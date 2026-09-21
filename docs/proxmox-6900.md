@@ -24,6 +24,10 @@ BIOS SmartFan IV idles at PWM 130 / ~11k RPM. Quietfan idle is PWM 20 / ~1740 RP
 | `proxmox/quietfan-qm20` | `/usr/local/sbin/quietfan` |
 | `proxmox/quietfan-qm20.service` | `/etc/systemd/system/quietfan.service` |
 | `proxmox/nct6775.conf` | `/etc/modules-load.d/nct6775.conf` |
+| `proxmox/quietfan-status.js` | `/usr/share/pve-manager/js/quietfan-status.js` |
+| `proxmox/QuietfanStatus.pm` | `/usr/share/perl5/PVE/API2/QuietfanStatus.pm` |
+| `proxmox/quietfan-ui-apply` | `/usr/local/sbin/quietfan-ui-apply` |
+| `proxmox/99quietfan-ui` | `/etc/apt/apt.conf.d/99quietfan-ui` |
 
 ## Install
 
@@ -41,6 +45,14 @@ systemctl status quietfan --no-pager
 
 Do **not** run `proxmox/install-ui.sh` on this box; that script loads `nct7904` for the 16200.
 
+Summary overlay only (PWM daemon already installed):
+
+```bash
+bash proxmox/install-ui-qm20.sh
+```
+
+That patches the node Summary page so CPU speed, CPU/chassis/disk temperatures, and chassis fan RPM show up under the stock widgets. It does **not** replace `/usr/local/sbin/quietfan`. `pve-manager` upgrades restore `Nodes.pm` and `index.html.tpl`; `/etc/apt/apt.conf.d/99quietfan-ui` re-applies those two edits.
+
 ## Verify
 
 ```bash
@@ -54,6 +66,8 @@ Log:
 ```text
 quietfan: temp=29.0C pwm=20
 ```
+
+The daemon also writes `/run/quietfan-status.json` every 4s. After a UI install, hard-refresh the browser (Ctrl+F5) and open the node **Summary**. Chassis board diodes are NCT6779 `SYSTIN` / `AUXTIN*`.
 
 ## Hand control back to SmartFan (loud)
 
