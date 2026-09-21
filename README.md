@@ -8,7 +8,8 @@ This is **not** a Check Point–supported control path. Watch temperatures after
 |-----------|-------|----------|---------|------|-------|
 | **16200** | QL-25-00 | NCT7904 (I2C `0-002e`) | Proxmox / Debian | [docs/proxmox.md](docs/proxmox.md) | [`proxmox/`](proxmox/) — Python 3 + systemd, plus a node Summary overlay |
 | **16200** | QL-25-00 | NCT7904 | Gaia R81 | [docs/gaia.md](docs/gaia.md) | [`gaia/quietfan`](gaia/quietfan) — Python 2 + SysV |
-| **6900** | QM-20-00 | NCT6779 (`nct6775.2608`) | Gaia R80.40 | [docs/gaia-6900.md](docs/gaia-6900.md) | [`gaia/quietfan-qm20`](gaia/quietfan-qm20) — Python 2 + SysV |
+| **6900** | QM-20-00 | NCT6779 (`nct6775` / `nct6779`) | Gaia R80.40 | [docs/gaia-6900.md](docs/gaia-6900.md) | [`gaia/quietfan-qm20`](gaia/quietfan-qm20) — Python 2 + SysV |
+| **6900** | QM-20-00 | NCT6779 | Proxmox / Debian | [docs/proxmox-6900.md](docs/proxmox-6900.md) | [`proxmox/quietfan-qm20`](proxmox/quietfan-qm20) — Python 3 + systemd |
 
 PSU fans are separate on both chassis and are **not** controlled. The 6900 does not even export PSU fan tachs (Gaia only shows PSU Up/Down).
 
