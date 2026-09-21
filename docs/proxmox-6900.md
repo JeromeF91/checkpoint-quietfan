@@ -69,6 +69,8 @@ quietfan: temp=29.0C pwm=20
 
 The daemon also writes `/run/quietfan-status.json` every 4s. After a UI install, hard-refresh the browser (Ctrl+F5) and open the node **Summary**. Chassis board diodes are NCT6779 `SYSTIN` / `AUXTIN*`.
 
+![Check Point 6900 Proxmox node Summary with quietfan CPU speed, temperatures, and fan RPM](images/proxmox-summary-6900.png)
+
 ## Hand control back to SmartFan (loud)
 
 ```bash

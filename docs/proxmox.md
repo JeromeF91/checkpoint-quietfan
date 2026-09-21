@@ -105,7 +105,7 @@ Raise PWM values if the box runs hot under VM load. Do not go below 20 on this c
 
 ## Proxmox UI overlay
 
-The daemon writes `/run/quietfan-status.json` every 4s (world-readable). A 3-line patch to `/usr/share/perl5/PVE/API2/Nodes.pm` attaches that JSON to the node status API. `quietfan-status.js` is loaded after `pvemanagerlib.js` and adds CPU speed, CPU/chassis/disk temperatures, and fan RPM to the node Summary panel.
+The daemon writes `/run/quietfan-status.json` every 4s (world-readable). A 3-line patch to `/usr/share/perl5/PVE/API2/Nodes.pm` attaches that JSON to the node status API. `quietfan-status.js` is loaded after `pvemanagerlib.js` and adds CPU speed, CPU/chassis/disk temperatures, and fan RPM to the node Summary panel. Same overlay on the 6900: [screenshot](images/proxmox-summary-6900.png).
 
 CPU temperatures are coretemp packages, shown as CPU0 / CPU1. Chassis temperature is NCT7904 `temp1` / `temp2` (board diodes). Disk temperatures come from the `drivetemp` kernel module (SATA Intel SSDs on this box), not from `smartctl`. Chassis RPM is NCT7904 sysfs, not IPMI `SYS_FAN*`.
 
